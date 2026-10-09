@@ -1,0 +1,41 @@
+[
+  {
+    "flow_id": "JSON-001",
+    "src_ip": "192.168.1.100",
+    "dst_ip": "172.217.16.206",
+    "src_port": 51000,
+    "dst_port": 443,
+    "sni": "www.google.com",
+    "total_packets": 32,
+    "total_bytes": 24000,
+    "duration": 3.2,
+    "pcr": -0.65,
+    "ja3_hash": "cd08e31494f9531f560d64cfa3f2233c"
+  },
+  {
+    "flow_id": "JSON-002",
+    "src_ip": "192.168.1.105",
+    "dst_ip": "185.220.101.5",
+    "src_port": 51240,
+    "dst_port": 443,
+    "sni": "beacon.apt-c2.top",
+    "total_packets": 12,
+    "total_bytes": 3200,
+    "duration": 30.0,
+    "pcr": 0.05,
+    "ja3_hash": "a0e9f5d64349fb13191bc781f81f42e1"
+  },
+  {
+    "flow_id": "JSON-003",
+    "src_ip": "192.168.1.189",
+    "dst_ip": "45.154.255.8",
+    "src_port": 54100,
+    "dst_port": 443,
+    "sni": "dropzone.cloud-s3.xyz",
+    "total_packets": 350,
+    "total_bytes": 490000,
+    "duration": 9.5,
+    "pcr": 0.92,
+    "ja3_hash": "51c64c77e60f3980eea90869b68c58a8"
+  }
+]
