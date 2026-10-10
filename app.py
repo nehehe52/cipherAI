@@ -237,6 +237,13 @@ if "play_beep_pending" not in st.session_state:
     st.session_state.play_beep_pending = False
 
 
+@st.cache_resource(show_spinner="Starting live network traffic monitor...")
+def get_live_network_monitor():
+    """One shared background traffic monitor per Streamlit server process."""
+    from core.live_network_monitor import LiveNetworkMonitor
+    return LiveNetworkMonitor().start()
+
+
 # ==========================================
 # Sidebar: Navigation & Operational Controls
 # ==========================================
@@ -252,7 +259,8 @@ app_mode = st.sidebar.radio(
         "📊 Benchmark Datasets & Model Training Lab",
         "🧪 Threat Simulator & Attack Sandbox",
         "🛡️ Active Quarantine & SOAR Rules",
-        "📚 MITRE ATT&CK Matrix & Threat Intel"
+        "📚 MITRE ATT&CK Matrix & Threat Intel",
+        "🚦 Live Network Traffic & Latency Guard"
     ],
     index=0
 )
@@ -1401,6 +1409,153 @@ elif app_mode == "📚 MITRE ATT&CK Matrix & Threat Intel":
     - **JA3 Fingerprinting**: Cryptographic fingerprint generated via MD5 of ClientHello parameters:
       $$\\text{JA3} = \\text{MD5}(\\text{SSLVersion},\\text{Ciphers},\\text{Extensions},\\text{EllipticCurves},\\text{ECPointFormats})$$
     """)
+
+
+# ==============================================================================
+# MODULE 7: LIVE NETWORK TRAFFIC & LATENCY GUARD
+# ==============================================================================
+elif app_mode == "🚦 Live Network Traffic & Latency Guard":
+    from core.live_network_monitor import TRAFFIC_PATTERNS, FLOOD_SOURCE_IP
+
+    st.subheader("🚦 Live Network Traffic Monitor & Latency Guard")
+    st.caption(
+        "A reverse proxy protecting an upstream service under heavy traffic: per-client token-bucket rate limiting, "
+        "a concurrency cap with a bounded FIFO queue and queue timeout, an upstream deadline, and fast load shedding "
+        "(429 / 503) so admitted requests keep low, predictable latency."
+    )
+
+    live_monitor = get_live_network_monitor()
+    guard_state = live_monitor.snapshot()
+    guard_limits = guard_state["limits"]
+
+    lc1, lc2, lc3 = st.columns([1.2, 1.2, 1.6])
+    with lc1:
+        st.markdown("##### 📡 Traffic Generator")
+        live_monitor.load_enabled = st.toggle("Generate client traffic", value=live_monitor.load_enabled, key="ln_load")
+        live_monitor.pattern = st.selectbox(
+            "Traffic pattern", TRAFFIC_PATTERNS, index=TRAFFIC_PATTERNS.index(live_monitor.pattern), key="ln_pattern"
+        )
+        live_monitor.target_rps = float(st.slider(
+            "Base request rate (req/s)", 10, 400, int(live_monitor.target_rps), 10, key="ln_rps"
+        ))
+        live_monitor.clients = st.slider("Distinct client IPs", 5, 500, live_monitor.clients, 5, key="ln_clients")
+
+    with lc2:
+        st.markdown("##### 🚨 Attack & Stress Injection")
+        live_monitor.flood_enabled = st.toggle(
+            f"HTTP flood from single IP ({FLOOD_SOURCE_IP})", value=live_monitor.flood_enabled, key="ln_flood",
+            help="One abusive client hammering the service. The per-client rate limiter should answer it with 429s."
+        )
+        live_monitor.flood_rps = float(st.slider(
+            "Flood rate (req/s)", 10, 400, int(live_monitor.flood_rps), 10, key="ln_flood_rps"
+        ))
+        live_monitor.backend_contention_ms = float(st.slider(
+            "Backend slowdown per concurrent request (ms)", 0, 20, int(live_monitor.backend_contention_ms), 1,
+            key="ln_contention", help="Higher = the demo backend degrades faster when overloaded."
+        ))
+        ln_auto_refresh = st.toggle("Auto-refresh every second", value=True, key="ln_auto")
+
+    with lc3:
+        st.markdown("##### 🛡️ Guard Policy")
+        with st.form("ln_guard_form"):
+            g1, g2 = st.columns(2)
+            f_rate = g1.number_input("Per-client rate (req/s)", 1.0, 100000.0, float(guard_limits["rate"]), 1.0)
+            f_burst = g2.number_input("Per-client burst", 1.0, 100000.0, float(guard_limits["burst"]), 1.0)
+            f_conc = g1.number_input("Max concurrency", 1, 4096, int(guard_limits["max_concurrency"]), 1)
+            f_queue = g2.number_input("Max queue length", 0, 100000, int(guard_limits["max_queue"]), 1)
+            f_qt = g1.number_input("Queue timeout (s)", 0.01, 60.0, float(guard_limits["queue_timeout_s"]), 0.05)
+            f_ut = g2.number_input("Upstream timeout (s)", 0.1, 300.0, float(guard_limits["upstream_timeout_s"]), 0.5)
+            current_upstream = "" if guard_state["upstream"] == live_monitor.demo_upstream else guard_state["upstream"]
+            f_upstream = st.text_input(
+                "Protected upstream URL (blank = built-in demo backend)", value=current_upstream,
+                placeholder="http://127.0.0.1:9000",
+            )
+            if st.form_submit_button("Apply guard policy", use_container_width=True):
+                live_monitor.configure_guard(
+                    rate=f_rate, burst=f_burst, max_concurrency=int(f_conc), max_queue=int(f_queue),
+                    queue_timeout=f_qt, upstream_timeout=f_ut, upstream=f_upstream.strip() or None,
+                )
+                st.toast("🛡️ Guard policy applied", icon="✅")
+
+    def render_live_network_panel():
+        s = live_monitor.snapshot()
+        w, lim = s["last_10s"], s["limits"]
+        lat, rej = w["latency_ms"], w["rejections"]
+
+        def fmt_ms(v):
+            if v is None:
+                return "–"
+            return f"{v / 1000:.2f} s" if v >= 1000 else f"{v:.0f} ms"
+
+        cards = [
+            ("Offered Load", f"{s['offered_rps']:.0f}", "req/s generated now"),
+            ("Throughput (10s)", f"{w['rps']:.0f}", "req/s answered"),
+            ("p50 Latency", fmt_ms(lat["p50"]), "admitted requests, 10s"),
+            ("p95 Latency", fmt_ms(lat["p95"]), "admitted requests, 10s"),
+            ("p99 Latency", fmt_ms(lat["p99"]), "admitted requests, 10s"),
+            ("In-Flight / Queued", f"{s['in_flight']} / {s['queued']}",
+             f"cap {lim['max_concurrency']} · queue {lim['max_queue']}"),
+            ("Shed Requests (10s)", f"{sum(rej.values())}",
+             f"rate {rej.get('rate_limited', 0)} · full {rej.get('queue_full', 0)} · timeout {rej.get('queue_timeout', 0)}"),
+            ("Error Rate (10s)", f"{w['error_rate'] * 100:.1f}%", "4xx + 5xx incl. shed"),
+        ]
+        for row_start in (0, 4):
+            cols = st.columns(4)
+            for col, (title, val, sub) in zip(cols, cards[row_start:row_start + 4]):
+                col.markdown(
+                    f"<div class='metric-box'><div class='metric-title'>{title}</div>"
+                    f"<div class='metric-val'>{val}</div><div class='metric-sub'>{sub}</div></div>",
+                    unsafe_allow_html=True,
+                )
+        st.write("")
+
+        ts = pd.DataFrame(s["timeseries"])
+        ts["Seconds ago"] = ts["ts"] - ts["ts"].max()
+        chart_layout = dict(
+            template="plotly_dark", paper_bgcolor="rgba(15, 23, 42, 0.4)", plot_bgcolor="rgba(15, 23, 42, 0.4)",
+            height=300, margin=dict(l=20, r=20, t=40, b=20), legend=dict(orientation="h", y=1.12),
+        )
+        ch1, ch2 = st.columns(2)
+        with ch1:
+            fig_lat = go.Figure()
+            for key, color in (("p50", "#38bdf8"), ("p95", "#eab308"), ("p99", "#ef4444")):
+                fig_lat.add_trace(go.Scatter(x=ts["Seconds ago"], y=ts[key], name=key, mode="lines",
+                                             line=dict(color=color, width=2), connectgaps=False))
+            fig_lat.update_layout(title="Latency of admitted requests (ms)", **chart_layout)
+            st.plotly_chart(fig_lat, use_container_width=True)
+        with ch2:
+            fig_thr = go.Figure()
+            for key, name, color in (("ok", "Served", "#22c55e"), ("rejected", "Shed (429/503)", "#f97316"),
+                                     ("errors", "Errors (5xx/504)", "#ef4444")):
+                fig_thr.add_trace(go.Bar(x=ts["Seconds ago"], y=ts[key].clip(lower=0), name=name, marker_color=color))
+            fig_thr.update_layout(title="Requests per second", barmode="stack", bargap=0.1, **chart_layout)
+            st.plotly_chart(fig_thr, use_container_width=True)
+
+        summary_rows = []
+        for label, win in (("Last 10s", s["last_10s"]), ("Last 60s", s["last_60s"])):
+            l, st_codes, r = win["latency_ms"], win["statuses"], win["rejections"]
+            summary_rows.append({
+                "Window": label, "Requests": win["requests"], "Req/s": win["rps"],
+                "p50 (ms)": l["p50"], "p95 (ms)": l["p95"], "p99 (ms)": l["p99"], "Max (ms)": l["max"],
+                "2xx": st_codes.get("2xx", 0), "4xx": st_codes.get("4xx", 0), "5xx": st_codes.get("5xx", 0),
+                "Rate limited": r.get("rate_limited", 0), "Queue full": r.get("queue_full", 0),
+                "Queue timeout": r.get("queue_timeout", 0),
+            })
+        st.dataframe(pd.DataFrame(summary_rows), use_container_width=True, hide_index=True)
+        upstream_label = "built-in demo backend" if s["upstream"] == live_monitor.demo_upstream else s["upstream"]
+        st.caption(
+            f"Guard → {upstream_label} · up {s['uptime_s']:.0f}s · total requests {s['totals'].get('requests', 0):,} · "
+            f"full-screen dashboard: {live_monitor.dashboard_url} · Prometheus: "
+            f"http://localhost:{live_monitor.guard_port}/__guard/prometheus"
+        )
+
+    if hasattr(st, "fragment"):
+        st.fragment(run_every=1.0 if ln_auto_refresh else None)(render_live_network_panel)()
+    else:
+        render_live_network_panel()
+        if ln_auto_refresh:
+            time.sleep(1.0)
+            st.rerun()
 
 
 # ==============================================================================

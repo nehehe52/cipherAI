@@ -44,6 +44,14 @@ An enterprise-grade **Encrypted Traffic Analytics (ETA)** and **Security Operati
    - **📊 Benchmark Datasets & Model Training Lab**: Data explorer, correlation heatmaps, model evaluation, and retraining.
    - **🧪 Interactive Sandbox**: Parameter tuning to test anomaly sensitivity and edge cases.
    - **🛡️ Active Defense Console**: One-click IP blocking and perimeter rule deployment.
+   - **🚦 Live Network Traffic & Latency Guard**: Live monitor that keeps response times low under heavy traffic (details below).
+
+7. **Live Network Traffic & Latency Guard**:
+   - A built-in reverse proxy that sits in front of a service: **per-client token-bucket rate limiting** (429), a **concurrency cap with a bounded FIFO queue and queue timeout** (503), an **upstream deadline** (504) and **fast load shedding**, so the requests it lets through keep low, predictable latency instead of slowing down together.
+   - Live **p50 / p95 / p99 latency**, throughput (served vs shed vs errors), in-flight and queue depth, updated every second.
+   - Traffic generator (wave / steady / spike patterns), a **single-IP HTTP flood** injector, and an adjustable backend slowdown to stress-test the policy.
+   - Guard policy can be tuned live, and can point at a real HTTP service instead of the built-in demo backend.
+   - Full-screen dashboard at `http://localhost:8765/__guard/` and Prometheus metrics at `/__guard/prometheus` while the app is running.
 
 ---
 
@@ -78,6 +86,11 @@ Ensure Python 3.10+ is installed. The required packages are:
 - `scapy`
 - `plotly`
 - `joblib`
+- `aiohttp` (Live Network Traffic & Latency Guard)
+
+```powershell
+pip install streamlit scikit-learn pandas numpy scapy plotly joblib aiohttp
+```
 
 ### 2. Run the Cyber Defense Dashboard
 Launch the interactive Streamlit SOC dashboard:
@@ -87,7 +100,7 @@ streamlit run app.py
 Open your browser at `http://localhost:8501`.
 
 ### 3. Run Automated Tests
-Execute the unit and integration test suite (8 tests covering detection, feature extraction, datasets, and PCAPs):
+Execute the unit and integration test suite (9 tests covering detection, feature extraction, datasets, PCAPs, and the live traffic guard):
 ```powershell
 python test_detection.py
 ```
@@ -106,7 +119,9 @@ AI_Threat_Detection/
 │   ├── dataset_manager.py       # Dataset catalog, data synthesis, model evaluation & retraining
 │   ├── traffic_generator.py     # Real-time traffic stream generator & attack injector
 │   ├── pcap_analyzer.py         # Scapy PCAP/PCAPNG parser & flow reconstructor
-│   └── mitigation_engine.py     # Automated SOAR rules, firewall synthesis, MITRE ATT&CK mapping
+│   ├── mitigation_engine.py     # Automated SOAR rules, firewall synthesis, MITRE ATT&CK mapping
+│   ├── live_network_monitor.py  # Background traffic guard + traffic generator for the live latency dashboard
+│   └── traffic_guard/           # Rate limiter, admission queue, latency metrics, guard proxy & HTML dashboard
 ├── datasets/                    # Benchmark datasets & raw network captures
 │   ├── master_unified_eta.csv   # 7,000 flow benchmark dataset
 │   ├── ctu13_botnet_tls.csv     # CTU-13 Botnet TLS & C2 dataset
