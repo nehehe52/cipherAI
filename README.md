@@ -11,6 +11,7 @@ An AI-assisted Encrypted Traffic Analytics (ETA) and Security Operations Center 
 3. Solution Description
 Our solution combines Isolation Forest for anomaly detection and Random Forest for supervised threat classification. It analyzes network flow features such as packet lengths, forward and backward byte counts, inter-arrival times, traffic asymmetry, and available TLS fingerprints to identify potentially malicious communication without decrypting payloads.
 The platform supports analysis through PCAP/PCAPNG files, benchmark datasets, and simulated real-time traffic streams, depending on the implemented data source. A Streamlit dashboard enables users to visualize traffic, investigate suspicious flows, review detection explanations, and evaluate model performance. The proposed active-defense functionality includes IP quarantine management and firewall-rule generation, where implemented and tested.
+An additional Live Network Traffic & Latency Guard module protects HTTP services under heavy traffic. It runs a reverse-proxy traffic guard in the background with per-client token-bucket rate limiting, a concurrency cap, a bounded request queue with a queue timeout, and upstream request deadlines. Excess requests are rejected quickly (HTTP 429/503/504) instead of slowing every client down. The dashboard shows live throughput, P50/P95/P99 latency, in-flight and queued requests, and shed/error counts, updated every second. Users can switch traffic patterns (wave, steady, spikes), launch a single-IP HTTP flood to watch the rate limiter block it, tune the guard policy at runtime, or point the guard at a real HTTP service.
 Key Features
 Dual-stage AI detection using Isolation Forest and Random Forest.
 Encrypted traffic analysis without application-payload decryption.
@@ -21,6 +22,8 @@ PCAP/PCAPNG forensic analysis.
 Dataset exploration, model evaluation, and retraining support.
 Streamlit-based security dashboard.
 Optional active defense and firewall-rule generation.
+Live Network Traffic & Latency Guard: per-client rate limiting, concurrency limits, request queueing, timeouts, and load shedding with live latency monitoring.
+JSON and Prometheus metrics endpoints for the live traffic guard.
 4. Architecture Diagram
 ```mermaid
 flowchart TD
@@ -51,6 +54,12 @@ flowchart TD
     L --> O[Optional Active Defense]
 
     O --> P[Authorized Firewall Rules]
+
+    Q[HTTP Client Traffic / Load Generator] --> R[Live Traffic Guard Proxy]
+    R --> S[Rate Limiter and Admission Queue]
+    S --> T[Protected HTTP Service]
+    R --> U[Live Latency and Throughput Metrics]
+    U --> L
 ```
 Workflow Explanation
 Traffic Ingestion: Accepts supported PCAP/PCAPNG files, benchmark datasets, or simulated traffic streams.
@@ -60,15 +69,18 @@ AI Detection: Isolation Forest identifies statistical anomalies, while Random Fo
 Explainable Analysis: Generates human-readable explanations and attribution breakdowns for detected threats.
 Dashboard Visualization: Displays interactive charts, real-time security alerts, and deep forensic inspection views.
 Response and Mitigation: Enables model evaluation/retraining along with optional automated firewall rule generation and IP quarantining.
+Live Traffic Guarding: Routes HTTP traffic through the background guard proxy, which rate-limits each client, caps concurrent upstream requests, queues short bursts, sheds overload, and records per-request latency for the live dashboard.
 5. Technology Stack
 Frontend: Streamlit, Plotly
 Backend: Python
 Machine Learning: Scikit-learn (Isolation Forest, Random Forest Classifier)
 Data Processing: Pandas, NumPy
 Network Analysis: Scapy
+Live Traffic Guard: aiohttp, asyncio
 Model Persistence: Joblib
 Database / Storage: CSV benchmark storage
 Security & Forensic Tools: TLS JA3 fingerprinting, Shannon entropy analysis, MITRE ATT&CK mapping
+Traffic Monitoring: P50/P95/P99 latency tracking, Prometheus-compatible metrics
 6. Quick Start Guide
 Prerequisites
 Python 3.10 or later
@@ -100,6 +112,7 @@ Run the dashboard application:
    streamlit run app.py
    ```
 Open `http://localhost:8501` in your browser.
+To use the live traffic module, select "🚦 Live Network Traffic & Latency Guard" in the sidebar. While it is running, the guard dashboard is available at `http://localhost:8765/__guard/` and Prometheus metrics at `http://localhost:8765/__guard/prometheus` (another free port is used if 8765 is busy).
 Run automated tests (optional):
 ```bash
    python test_detection.py
@@ -126,6 +139,7 @@ Scalability Enhancements: Implement batching and distributed processing pipeline
 Model Evaluation: Expand quantitative benchmarking across larger multi-source encrypted datasets.
 Governance & SOAR: Add role-based access control (RBAC), approval workflows, audit trails, and automated firewall policy rollback mechanisms.
 Persistence & Monitoring: Incorporate dedicated database storage for historical alerts and continuous drift monitoring for model retraining.
+Distributed Traffic Guarding: Share rate-limit state across multiple guard instances and add streaming/WebSocket proxy support.
 9. Team Contributions
 Member Name	Contribution
 Sayooj S Nair	Machine learning model development, anomaly detection algorithms, and threat classification engine.
@@ -140,4 +154,5 @@ Pandas & NumPy	Handles numerical array processing and tabular data extraction.
 Scapy	Performs packet parsing, PCAP forensic processing, and header inspection.
 Plotly	Generates real-time threat charts and latency graphs.
 Joblib	Handles model serialization and dynamic loading.
+aiohttp	Runs the asynchronous live traffic guard proxy, demo backend, and traffic generator.
 Team ID: OPC038 | OPCODE IMPACT 2026 Submission
