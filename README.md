@@ -1,154 +1,143 @@
-# 🛡️ AI-Powered Automated Threat Detection & Real-Time Anomaly Analysis in Encrypted Network Traffic
+AI-Powered Automated Threat Detection & Real-Time Anomaly Analysis in Encrypted Network Traffic
+OPCODE IMPACT 2026 | Hackathon Submission
+Team ID: OPC038
+1. Problem Statement
+Modern organizations rely heavily on encrypted network protocols such as HTTPS, TLS 1.2/1.3, SSH, DNS-over-HTTPS (DoH), and Tor. Although encryption protects privacy and sensitive information, it also makes it difficult for traditional security systems to identify malicious activities hidden within encrypted communication.
+Threats such as Command and Control (C2) beaconing, data exfiltration, covert tunneling, proxy abuse, and denial-of-service attacks can remain undetected when security monitoring relies primarily on packet payload inspection.
+Our project addresses this challenge by analyzing encrypted network traffic using statistical flow characteristics, packet timing patterns, cryptographic fingerprints, and machine learning without requiring payload decryption.
+2. Solution Title
+AI-Powered Automated Threat Detection & Real-Time Anomaly Analysis in Encrypted Network Traffic
+An AI-assisted Encrypted Traffic Analytics (ETA) and Security Operations Center (SOC) platform designed to detect suspicious network behavior while preserving the confidentiality of encrypted payloads.
+3. Solution Description
+Our solution combines Isolation Forest for anomaly detection and Random Forest for supervised threat classification. It analyzes network flow features such as packet lengths, forward and backward byte counts, inter-arrival times, traffic asymmetry, and available TLS fingerprints to identify potentially malicious communication without decrypting payloads.
+The platform supports analysis through PCAP/PCAPNG files, benchmark datasets, and simulated real-time traffic streams, depending on the implemented data source. A Streamlit dashboard enables users to visualize traffic, investigate suspicious flows, review detection explanations, and evaluate model performance. The proposed active-defense functionality includes IP quarantine management and firewall-rule generation, where implemented and tested.
+Key Features
+Dual-stage AI detection using Isolation Forest and Random Forest.
+Encrypted traffic analysis without application-payload decryption.
+Seven intended traffic categories: benign web, benign streaming, C2 beaconing, data exfiltration, Tor proxy tunneling, DoH data tunneling, and TLS flooding.
+Statistical flow feature extraction and available TLS fingerprint analysis.
+Explainable threat alerts.
+PCAP/PCAPNG forensic analysis.
+Dataset exploration, model evaluation, and retraining support.
+Streamlit-based security dashboard.
+Optional active defense and firewall-rule generation.
+4. Architecture Diagram
+```mermaid
+flowchart TD
+    A[Network Traffic Sources] --> B[Traffic Ingestion]
+    A1[PCAP / PCAPNG Files] --> B
+    A2[Simulated Live Traffic] --> B
+    A3[Benchmark CSV Datasets] --> B
 
-An enterprise-grade **Encrypted Traffic Analytics (ETA)** and **Security Operations Center (SOC)** defense platform. Analyzes high-speed encrypted channels (**TLS 1.2 / TLS 1.3, HTTPS, SSH, DNS-over-HTTPS, and Tor**) in real-time **without payload decryption** or breaking privacy/encryption integrity.
+    B --> C[Flow Reconstruction]
+    C --> D[Feature Extraction]
+    D --> E[TLS Fingerprints and Entropy]
+    D --> F[Statistical Flow Features]
 
----
+    E --> G[AI Detection Engine]
+    F --> G
 
-## 🌟 Key Features
+    G --> H[Isolation Forest]
+    G --> I[Random Forest Classifier]
 
-1. **Dual-Stage AI Detection Engine**:
-   - **Unsupervised Anomaly Detection (Isolation Forest)**: Calibrated against normal TLS baseline traffic to detect zero-day anomalies, unknown evasive protocols, and outlier sessions.
-   - **Supervised Encrypted Threat Classifier (Random Forest Ensemble)**: Multi-class classifier trained on statistical flow behaviors, distinguishing:
-     * `BENIGN_WEB`: Standard HTTPS browsing (Google, GitHub, Microsoft 365, Wikipedia).
-     * `BENIGN_STREAMING`: Video/Audio conferencing and media streams (Netflix, Zoom, YouTube).
-     * `C2_BEACONING`: Command & Control heartbeat polling (Cobalt Strike Malleable C2, Sliver, Metasploit HTTPS).
-     * `DATA_EXFILTRATION`: Stealth outbound encrypted exfiltration (S3 bucket dumps, Mega, unauthorized VPS uploads).
-     * `TOR_PROXY_TUNNEL`: Tor onion routing circuits and multi-hop obfuscated proxy tunnels.
-     * `DOH_DATA_TUNNEL`: DNS-over-HTTPS covert data exfiltration and DGA beaconing.
-     * `TLS_DDOS_FLOOD`: High-rate TLS handshake exhaustion and SSL flood attacks.
+    H --> J[Threat Assessment]
+    I --> J
 
-2. **Sequence & Cryptographic Telemetry (26 Features)**:
-   - **Sequence of Packet Lengths and Times (SPLT)**: Captures packet length dynamics, bimodal ACK-to-MTU ratios, and directional flow patterns.
-   - **Producer-Consumer Ratio (PCR)**: Computes byte asymmetry: $\text{PCR} = \frac{\text{Bytes}_{fwd} - \text{Bytes}_{bwd}}{\text{Bytes}_{fwd} + \text{Bytes}_{bwd}} \in [-1.0, 1.0]$.
-   - **Inter-Arrival Time (IAT) Jitter Analysis**: Detects automated heartbeat beaconing ($\text{Jitter} < 0.15$).
-   - **JA3 / JA4 Fingerprinting**: Hashes ClientHello SSLVersion, Ciphers, Extensions, Elliptic Curves, and EC Formats to match known adversary tools.
-   - **Shannon Entropy Analysis**: Detects Domain Generation Algorithms (DGA) and base32/hex encrypted DNS tunneling subdomains.
+    J --> K[Explainable AI]
+    K --> L[Streamlit SOC Dashboard]
 
-3. **Explainable AI (XAI)**:
-   - Generates transparent, human-auditable reasoning for every flagged flow (e.g. *"Periodic Beaconing Heartbeat detected: IAT Jitter = 0.04; JA3 matched Cobalt Strike profile"*).
+    L --> M[Alerts and Investigation]
+    L --> N[Model Evaluation and Retraining]
+    L --> O[Optional Active Defense]
 
-4. **Automated SOAR Mitigation & Response**:
-   - Live IP Quarantine registry.
-   - Instant dynamic firewall rule generation (`netsh advfirewall` for Windows and `iptables` for Linux).
-   - Direct mapping to the **MITRE ATT&CK Framework** (T1071.001, T1041, T1090.003, T1071.004, T1498.001).
-
-5. **Benchmark Datasets & Model Retraining Studio**:
-   - Built-in real-world security benchmark datasets (CTU-13 Botnet TLS, CIRA-CIC-DoH Tunneling, ISCX Tor/VPN, Enterprise Baseline, Master Unified ETA).
-   - Attack-specific PCAPs for every threat category.
-   - Interactive model evaluation with confusion matrices and per-class classification reports.
-   - Live model retraining and custom CSV dataset ingestion.
-
-6. **Multi-Mode Operations**:
-   - **⚡ Real-Time Live Traffic Stream**: Interactive real-time streaming with one-click attack injection buttons.
-   - **📁 PCAP / PCAPNG Forensics**: Ingestion of real packet captures with TCP flow reconstruction and TLS ClientHello extraction.
-   - **📊 Benchmark Datasets & Model Training Lab**: Data explorer, correlation heatmaps, model evaluation, and retraining.
-   - **🧪 Interactive Sandbox**: Parameter tuning to test anomaly sensitivity and edge cases.
-   - **🛡️ Active Defense Console**: One-click IP blocking and perimeter rule deployment.
-   - **🚦 Live Network Traffic & Latency Guard**: Live monitor that keeps response times low under heavy traffic (details below).
-
-7. **Live Network Traffic & Latency Guard**:
-   - A built-in reverse proxy that sits in front of a service: **per-client token-bucket rate limiting** (429), a **concurrency cap with a bounded FIFO queue and queue timeout** (503), an **upstream deadline** (504) and **fast load shedding**, so the requests it lets through keep low, predictable latency instead of slowing down together.
-   - Live **p50 / p95 / p99 latency**, throughput (served vs shed vs errors), in-flight and queue depth, updated every second.
-   - Traffic generator (wave / steady / spike patterns), a **single-IP HTTP flood** injector, and an adjustable backend slowdown to stress-test the policy.
-   - Guard policy can be tuned live, and can point at a real HTTP service instead of the built-in demo backend.
-   - Full-screen dashboard at `http://localhost:8765/__guard/` and Prometheus metrics at `/__guard/prometheus` while the app is running.
-
----
-
-## 📊 Built-In Security Benchmark Datasets
-
-| Dataset | Records | Focus & Categories | Origin / Citation |
-| :--- | :---: | :--- | :--- |
-| **Master Unified ETA Benchmark** | `7,000` | All 7 Classes (Benign Web/Media, C2, Exfil, Tor, DoH, DDoS) | Aggregated ETA Consortium |
-| **CTU-13 Botnet TLS & C2** | `3,500` | Cobalt Strike, Emotet, TrickBot, Neris C2 vs Benign | CTU University / Stratosphere IPS |
-| **CIRA-CIC-DoH Encrypted Tunneling** | `3,200` | Covert DNS2TCP, Iodine, dnscat2 data exfiltration vs DoH | University of New Brunswick / CIRA |
-| **ISCX Tor & VPN Obfuscation** | `3,000` | Tor Onion Routing circuits, SSL VPN tunnels vs native HTTPS | UNB Institute for Cybersecurity (ISCX) |
-| **Enterprise TLS 1.3 Clean Baseline** | `2,500` | Microsoft 365, Google Workspace, GitHub, Zoom, AWS API | Corporate Perimeter Telemetry |
-
-### 📁 Pre-Generated Attack PCAP Captures
-The `datasets/pcaps/` folder includes raw `.pcap` capture files ready for one-click forensics:
-- `c2_cobaltstrike_beacon.pcap`
-- `data_exfiltration_tls.pcap`
-- `tor_onion_proxy.pcap`
-- `doh_covert_tunnel.pcap`
-- `benign_enterprise_tls.pcap`
-
----
-
-## 🚀 Quick Start Guide
-
-### 1. Requirements & Dependencies
-Ensure Python 3.10+ is installed. The required packages are:
-- `streamlit`
-- `scikit-learn`
-- `pandas`
-- `numpy`
-- `scapy`
-- `plotly`
-- `joblib`
-- `aiohttp` (Live Network Traffic & Latency Guard)
-
-```powershell
-pip install streamlit scikit-learn pandas numpy scapy plotly joblib aiohttp
+    O --> P[Authorized Firewall Rules]
 ```
-
-### 2. Run the Cyber Defense Dashboard
-Launch the interactive Streamlit SOC dashboard:
-```powershell
-streamlit run app.py
-```
-Open your browser at `http://localhost:8501`.
-
-### 3. Run Automated Tests
-Execute the unit and integration test suite (9 tests covering detection, feature extraction, datasets, PCAPs, and the live traffic guard):
-```powershell
-python test_detection.py
-```
-
----
-
-## 📁 Repository Structure
-
-```
-AI_Threat_Detection/
-├── core/
-│   ├── __init__.py
-│   ├── tls_fingerprint.py       # JA3 hashing, signature lookup, Shannon entropy & DGA scoring
-│   ├── feature_extractor.py     # 26-feature extraction engine (SPLT, PCR, IAT, Jitter, Entropy)
-│   ├── ai_engine.py             # Isolation Forest + Random Forest classifier + XAI engine
-│   ├── dataset_manager.py       # Dataset catalog, data synthesis, model evaluation & retraining
-│   ├── traffic_generator.py     # Real-time traffic stream generator & attack injector
-│   ├── pcap_analyzer.py         # Scapy PCAP/PCAPNG parser & flow reconstructor
-│   ├── mitigation_engine.py     # Automated SOAR rules, firewall synthesis, MITRE ATT&CK mapping
-│   ├── live_network_monitor.py  # Background traffic guard + traffic generator for the live latency dashboard
-│   └── traffic_guard/           # Rate limiter, admission queue, latency metrics, guard proxy & HTML dashboard
-├── datasets/                    # Benchmark datasets & raw network captures
-│   ├── master_unified_eta.csv   # 7,000 flow benchmark dataset
-│   ├── ctu13_botnet_tls.csv     # CTU-13 Botnet TLS & C2 dataset
-│   ├── cira_cic_doh_tunneling.csv # CIRA-CIC-DoH covert tunneling dataset
-│   ├── iscx_tor_vpn.csv         # ISCX Tor & VPN obfuscation dataset
-│   ├── enterprise_tls_baseline.csv # Legitimate corporate baseline dataset
-│   └── pcaps/                   # Pre-generated attack PCAPs for forensic testing
-│       ├── c2_cobaltstrike_beacon.pcap
-│       ├── data_exfiltration_tls.pcap
-│       ├── tor_onion_proxy.pcap
-│       ├── doh_covert_tunnel.pcap
-│       └── benign_enterprise_tls.pcap
-├── app.py                       # Streamlit SOC Command Center Dashboard
-├── test_detection.py            # Complete test suite (8 tests covering all modules)
-├── sample_traffic.pcap          # Combined sample capture for instant PCAP forensic testing
-└── README.md                    # Project documentation
-```
-
----
-
-## 📊 MITRE ATT&CK Threat Mapping
-
-| Threat Category | Severity | MITRE Tactic | Technique ID | Technique Name |
-| :--- | :---: | :--- | :--- | :--- |
-| **C2 Beaconing** | `CRITICAL` | Command & Control | T1071.001 | Web Protocols (TLS/HTTPS) |
-| **Data Exfiltration** | `CRITICAL` | Exfiltration | T1041 | Exfiltration Over C2 / Web Channel |
-| **Tor Proxy Tunnel** | `HIGH` | Defense Evasion | T1090.003 | Multi-hop Proxy (Tor / Onion Routing) |
-| **DoH Data Tunnel** | `HIGH` | Command & Control | T1071.004 | DNS over HTTPS Covert Channel |
-| **TLS DDoS Flood** | `MEDIUM` | Impact | T1498.001 | Network Denial of Service: Direct Flood |
-| **Benign Web / Media**| `BENIGN` | None | N/A | Clean Encrypted Enterprise Traffic |
+Workflow Explanation
+Traffic Ingestion: Accepts supported PCAP/PCAPNG files, benchmark datasets, or simulated traffic streams.
+Flow Reconstruction: Groups individual packets into bidirectional network flows based on 5-tuple metrics.
+Feature Extraction: Calculates statistical metrics, packet timing distributions, direction ratios, entropy, and available TLS fingerprints.
+AI Detection: Isolation Forest identifies statistical anomalies, while Random Forest classifies flows into predefined threat categories.
+Explainable Analysis: Generates human-readable explanations and attribution breakdowns for detected threats.
+Dashboard Visualization: Displays interactive charts, real-time security alerts, and deep forensic inspection views.
+Response and Mitigation: Enables model evaluation/retraining along with optional automated firewall rule generation and IP quarantining.
+5. Technology Stack
+Frontend: Streamlit, Plotly
+Backend: Python
+Machine Learning: Scikit-learn (Isolation Forest, Random Forest Classifier)
+Data Processing: Pandas, NumPy
+Network Analysis: Scapy
+Model Persistence: Joblib
+Database / Storage: CSV benchmark storage
+Security & Forensic Tools: TLS JA3 fingerprinting, Shannon entropy analysis, MITRE ATT&CK mapping
+6. Quick Start Guide
+Prerequisites
+Python 3.10 or later
+`pip` package manager
+Windows, Linux, or macOS
+Installation & Execution
+Open the project directory:
+```bash
+   cd AI_Threat_Detection
+   ```
+Create and activate a virtual environment:
+Windows:
+```bash
+     python -m venv .venv
+     .venv\Scripts\activate
+     ```
+Linux/macOS:
+```bash
+     python3 -m venv .venv
+     source .venv/bin/activate
+     ```
+Install dependencies:
+```bash
+   python -m pip install --upgrade pip
+   python -m pip install streamlit scikit-learn pandas numpy scapy plotly joblib aiohttp
+   ```
+Run the dashboard application:
+```bash
+   streamlit run app.py
+   ```
+Open `http://localhost:8501` in your browser.
+Run automated tests (optional):
+```bash
+   python test_detection.py
+   ```
+7. Output Screenshots
+1. Main SOC Control Console & Real-Time Incident Stream
+![Real-Time Incident Stream](Screenshot%202026-10-10%20080502.jpg)
+> *Displays the real-time security incident stream, Inter-Arrival Time jitter coefficient vs Producer-Consumer ratio plot, anomaly sensitivity controls, and active threat detection alerts (DoH Data Tunneling, C2 Beaconing).*
+2. Benchmark Datasets & AI Model Training Lab
+![Benchmark Datasets](Screenshot%202026-10-10%20080537.jpg)
+> *Provides benchmark dataset metrics (7,000 flow samples, 61.4% malicious share), dataset selection, threat class breakdown, and AI model training lab statistics.*
+3. Interactive Threat Simulator & Parameter Tuning
+![Threat Simulator](Screenshot%202026-10-10%20080559.jpg)
+> *Enables interactive parameter tuning for session duration, total packet count, forward/outbound ratios, mean packet length, inter-arrival time jitter, and cryptographic TLS attributes (SNI domain, JA3 fingerprint).*
+4. Explainable AI Evaluation & Deep Flow Forensic Inspector
+![Forensic Inspector](Screenshot%202026-10-10%20080619.jpg)
+> *Deep-dives into network 5-tuples, cryptographic TLS details, JA3 signature matches (e.g., Chrome/Win11 ClientHello), anomaly score calculation, and explainable AI (XAI) attribution breakdowns.*
+5. Live Network Traffic & Latency Guard
+![Latency Guard](Screenshot%202026-10-10%20080746.jpg)
+> *Monitors real-time operational performance metrics, including throughput, P50/P95/P99 latency curves, queue depths, request loads, and shed request counts.*
+8. Future Scope
+Live Stream Ingestion: Integrate asynchronous packet capture drivers for high-throughput live network environments.
+Scalability Enhancements: Implement batching and distributed processing pipelines for enterprise network traffic.
+Model Evaluation: Expand quantitative benchmarking across larger multi-source encrypted datasets.
+Governance & SOAR: Add role-based access control (RBAC), approval workflows, audit trails, and automated firewall policy rollback mechanisms.
+Persistence & Monitoring: Incorporate dedicated database storage for historical alerts and continuous drift monitoring for model retraining.
+9. Team Contributions
+Member Name	Contribution
+Sayooj S Nair	Machine learning model development, anomaly detection algorithms, and threat classification engine.
+Neha Fathima M	Feature extraction, PCAP/PCAPNG network traffic analysis, dataset preparation, and automated testing.
+Rena Sherin M A	Streamlit dashboard development, interactive data visualization, system integration, and documentation.
+10. Tools Used
+Tool / Platform	Purpose / Why Used
+Python	Core programming language for network telemetry extraction and ML logic.
+Streamlit	Powers the interactive SOC control console and security tools.
+Scikit-learn	Implements Isolation Forest and Random Forest algorithms.
+Pandas & NumPy	Handles numerical array processing and tabular data extraction.
+Scapy	Performs packet parsing, PCAP forensic processing, and header inspection.
+Plotly	Generates real-time threat charts and latency graphs.
+Joblib	Handles model serialization and dynamic loading.
+Team ID: OPC038 | OPCODE IMPACT 2026 Submission
