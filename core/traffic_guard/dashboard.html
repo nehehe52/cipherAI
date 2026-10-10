@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>traffic-guard</title>
+<style>
+  :root { --bg:#0f1115; --panel:#171a21; --line:#262a33; --text:#e6e8ee; --muted:#8a90a0;
+          --p50:#4ea1ff; --p95:#f5a623; --p99:#ff5d5d; --ok:#3ecf8e; --rej:#f5a623; --err:#ff5d5d; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif; background:var(--bg); color:var(--text); }
+  header { display:flex; align-items:baseline; gap:16px; padding:16px 24px; border-bottom:1px solid var(--line); }
+  header h1 { font-size:18px; margin:0; }
+  header .meta { color:var(--muted); font-size:13px; }
+  #status { margin-left:auto; font-size:12px; color:var(--muted); }
+  #status.live::before { content:"●"; color:var(--ok); margin-right:6px; }
+  #status.down::before { content:"●"; color:var(--err); margin-right:6px; }
+  main { padding:20px 24px; display:grid; gap:16px; }
+  .cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:12px 14px; }
+  .card .label { color:var(--muted); font-size:12px; text-transform:uppercase; letter-spacing:.04em; }
+  .card .value { font-size:24px; font-weight:600; margin-top:4px; font-variant-numeric:tabular-nums; }
+  .card .sub { color:var(--muted); font-size:12px; }
+  .bar { height:4px; background:var(--line); border-radius:2px; margin-top:8px; overflow:hidden; }
+  .bar > div { height:100%; background:var(--p50); width:0; transition:width .3s; }
+  .charts { display:grid; grid-template-columns:repeat(auto-fit,minmax(420px,1fr)); gap:16px; }
+  .panel { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:14px; }
+  .panel h2 { font-size:13px; margin:0 0 8px; color:var(--muted); font-weight:500; display:flex; gap:12px; }
+  .legend span::before { content:""; display:inline-block; width:10px; height:10px; border-radius:2px; margin-right:4px; vertical-align:-1px; background:var(--c); }
+  svg { width:100%; height:220px; display:block; }
+  table { width:100%; border-collapse:collapse; font-variant-numeric:tabular-nums; }
+  th, td { text-align:right; padding:6px 8px; border-bottom:1px solid var(--line); }
+  th:first-child, td:first-child { text-align:left; }
+  th { color:var(--muted); font-weight:500; font-size:12px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>traffic-guard</h1>
+  <span class="meta" id="upstream"></span>
+  <span id="status">connecting…</span>
+</header>
+<main>
+  <section class="cards">
+    <div class="card"><div class="label">Throughput (10s)</div><div class="value" id="rps">–</div><div class="sub">requests / s</div></div>
+    <div class="card"><div class="label">p50 latency</div><div class="value" id="p50">–</div><div class="sub">last 10s</div></div>
+    <div class="card"><div class="label">p95 latency</div><div class="value" id="p95">–</div><div class="sub">last 10s</div></div>
+    <div class="card"><div class="label">p99 latency</div><div class="value" id="p99">–</div><div class="sub">last 10s</div></div>
+    <div class="card"><div class="label">In flight</div><div class="value" id="inflight">–</div><div class="sub" id="inflight-sub"></div><div class="bar"><div id="inflight-bar"></div></div></div>
+    <div class="card"><div class="label">Queued</div><div class="value" id="queued">–</div><div class="sub" id="queued-sub"></div><div class="bar"><div id="queued-bar" style="background:var(--p95)"></div></div></div>
+    <div class="card"><div class="label">Rejected (10s)</div><div class="value" id="rejected">–</div><div class="sub" id="rejected-sub"></div></div>
+    <div class="card"><div class="label">Error rate (10s)</div><div class="value" id="errrate">–</div><div class="sub">4xx + 5xx incl. shed</div></div>
+  </section>
+  <section class="charts">
+    <div class="panel">
+      <h2>Latency (ms, admitted requests) <span class="legend"><span style="--c:var(--p50)">p50</span> <span style="--c:var(--p95)">p95</span> <span style="--c:var(--p99)">p99</span></span></h2>
+      <svg id="lat" viewBox="0 0 600 220" preserveAspectRatio="none"></svg>
+    </div>
+    <div class="panel">
+      <h2>Requests / s <span class="legend"><span style="--c:var(--ok)">ok</span> <span style="--c:var(--rej)">shed</span> <span style="--c:var(--err)">errors</span></span></h2>
+      <svg id="thr" viewBox="0 0 600 220" preserveAspectRatio="none"></svg>
+    </div>
+  </section>
+  <section class="panel">
+    <h2>Summary</h2>
+    <table id="summary"><thead><tr><th>window</th><th>requests</th><th>rps</th><th>p50</th><th>p90</th><th>p95</th><th>p99</th><th>max</th><th>2xx</th><th>4xx</th><th>5xx</th><th>rate_limited</th><th>queue_full</th><th>queue_timeout</th></tr></thead><tbody></tbody></table>
+  </section>
+</main>
+<script>
+const W = 600, H = 220, PAD = { l: 44, r: 8, t: 8, b: 20 };
+const $ = id => document.getElementById(id);
+const ms = v => v == null ? "–" : (v >= 1000 ? (v / 1000).toFixed(2) + " s" : v.toFixed(1) + " ms");
+
+function niceMax(v) {
+  if (!v || v <= 0) return 1;
+  const p = Math.pow(10, Math.floor(Math.log10(v)));
+  for (const m of [1, 2, 2.5, 5, 10]) if (v <= m * p) return m * p;
+  return 10 * p;
+}
+
+function axes(max, n) {
+  let g = "";
+  for (let i = 0; i <= 4; i++) {
+    const y = PAD.t + (H - PAD.t - PAD.b) * (1 - i / 4);
+    const v = max * i / 4;
+    g += `<line x1="${PAD.l}" x2="${W - PAD.r}" y1="${y}" y2="${y}" stroke="#262a33"/>`;
+    g += `<text x="${PAD.l - 6}" y="${y + 4}" fill="#8a90a0" font-size="10" text-anchor="end">${v >= 1000 ? (v/1000).toFixed(1)+"k" : +v.toFixed(1)}</text>`;
+  }
+  g += `<text x="${PAD.l}" y="${H - 4}" fill="#8a90a0" font-size="10">-${n}s</text>`;
+  g += `<text x="${W - PAD.r}" y="${H - 4}" fill="#8a90a0" font-size="10" text-anchor="end">now</text>`;
+  return g;
+}
+
+const X = (i, n) => PAD.l + (W - PAD.l - PAD.r) * (n <= 1 ? 1 : i / (n - 1));
+const Y = (v, max) => PAD.t + (H - PAD.t - PAD.b) * (1 - v / max);
+
+function line(series, key, max, color) {
+  let d = "", pen = false;
+  series.forEach((p, i) => {
+    const v = p[key];
+    if (v == null) { pen = false; return; }
+    d += (pen ? "L" : "M") + X(i, series.length).toFixed(1) + "," + Y(v, max).toFixed(1);
+    pen = true;
+  });
+  return `<path d="${d}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round"/>`;
+}
+
+function drawLatency(ts) {
+  const max = niceMax(Math.max(1, ...ts.map(p => p.p99 || 0)));
+  $("lat").innerHTML = axes(max, ts.length) +
+    line(ts, "p50", max, "var(--p50)") + line(ts, "p95", max, "var(--p95)") + line(ts, "p99", max, "var(--p99)");
+}
+
+function drawThroughput(ts) {
+  const max = niceMax(Math.max(1, ...ts.map(p => p.requests)));
+  const bw = (W - PAD.l - PAD.r) / ts.length;
+  let bars = "";
+  ts.forEach((p, i) => {
+    const x = PAD.l + i * bw;
+    let base = 0;
+    for (const [k, c] of [["ok", "var(--ok)"], ["rejected", "var(--rej)"], ["errors", "var(--err)"]]) {
+      const v = Math.max(0, p[k] || 0);
+      if (!v) continue;
+      const y1 = Y(base + v, max), y0 = Y(base, max);
+      bars += `<rect x="${(x + 0.5).toFixed(1)}" y="${y1.toFixed(1)}" width="${Math.max(1, bw - 1).toFixed(1)}" height="${(y0 - y1).toFixed(1)}" fill="${c}"/>`;
+      base += v;
+    }
+  });
+  $("thr").innerHTML = axes(max, ts.length) + bars;
+}
+
+function row(name, w) {
+  const l = w.latency_ms, s = w.statuses, r = w.rejections;
+  return `<tr><td>${name}</td><td>${w.requests}</td><td>${w.rps}</td><td>${ms(l.p50)}</td><td>${ms(l.p90)}</td><td>${ms(l.p95)}</td><td>${ms(l.p99)}</td><td>${ms(l.max)}</td>` +
+    `<td>${s["2xx"] || 0}</td><td>${s["4xx"] || 0}</td><td>${s["5xx"] || 0}</td><td>${r.rate_limited || 0}</td><td>${r.queue_full || 0}</td><td>${r.queue_timeout || 0}</td></tr>`;
+}
+
+async function tick() {
+  try {
+    const r = await fetch("/__guard/metrics", { cache: "no-store" });
+    const s = await r.json();
+    const w = s.last_10s, lim = s.limits;
+    $("status").className = "live"; $("status").textContent = "live · up " + Math.round(s.uptime_s) + "s";
+    $("upstream").textContent = "→ " + s.upstream;
+    $("rps").textContent = w.rps.toFixed(1);
+    $("p50").textContent = ms(w.latency_ms.p50);
+    $("p95").textContent = ms(w.latency_ms.p95);
+    $("p99").textContent = ms(w.latency_ms.p99);
+    $("inflight").textContent = s.in_flight;
+    $("inflight-sub").textContent = "of " + lim.max_concurrency + " slots";
+    $("inflight-bar").style.width = Math.min(100, 100 * s.in_flight / lim.max_concurrency) + "%";
+    $("queued").textContent = s.queued;
+    $("queued-sub").textContent = "of " + lim.max_queue + " · timeout " + lim.queue_timeout_s + "s";
+    $("queued-bar").style.width = Math.min(100, 100 * s.queued / Math.max(1, lim.max_queue)) + "%";
+    const rej = w.rejections, nrej = Object.values(rej).reduce((a, b) => a + b, 0);
+    $("rejected").textContent = nrej;
+    $("rejected-sub").textContent = `rate ${rej.rate_limited || 0} · full ${rej.queue_full || 0} · timeout ${rej.queue_timeout || 0}`;
+    $("errrate").textContent = (w.error_rate * 100).toFixed(1) + "%";
+    drawLatency(s.timeseries);
+    drawThroughput(s.timeseries);
+    document.querySelector("#summary tbody").innerHTML = row("10s", s.last_10s) + row("60s", s.last_60s);
+  } catch (e) {
+    $("status").className = "down"; $("status").textContent = "disconnected";
+  }
+}
+tick();
+setInterval(tick, 1000);
+</script>
+</body>
+</html>

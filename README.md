@@ -93,7 +93,7 @@ Linux/macOS:
 Install dependencies:
 ```bash
    python -m pip install --upgrade pip
-   python -m pip install streamlit scikit-learn pandas numpy scapy plotly joblib
+   python -m pip install streamlit scikit-learn pandas numpy scapy plotly joblib aiohttp
    ```
 Run the dashboard application:
 ```bash

@@ -141,5 +141,30 @@ class TestEncryptedThreatDetection(unittest.TestCase):
         self.assertGreaterEqual(len(pcaps), 5)
 
 
+    def test_live_network_monitor_guard(self):
+        """Verify the live traffic guard serves, rate-limits a flood source, and reconfigures at runtime."""
+        import time
+        from core.live_network_monitor import LiveNetworkMonitor
+        monitor = LiveNetworkMonitor(guard_port=0).start()
+        try:
+            monitor.target_rps = 60
+            monitor.flood_enabled = True
+            monitor.flood_rps = 60
+            time.sleep(3)
+            snap = monitor.snapshot()
+            self.assertGreater(snap["totals"].get("2xx", 0), 0)
+            self.assertGreater(snap["totals"].get("rate_limited", 0), 0)
+            self.assertIsNotNone(snap["last_10s"]["latency_ms"]["p50"])
+            self.assertEqual(len(snap["timeseries"]), 60)
+
+            monitor.configure_guard(rate=500, burst=500, max_concurrency=8, max_queue=4,
+                                    queue_timeout=0.1, upstream_timeout=1.0)
+            limits = monitor.snapshot()["limits"]
+            self.assertEqual(limits["max_concurrency"], 8)
+            self.assertEqual(limits["rate"], 500)
+        finally:
+            monitor.stop()
+
+
 if __name__ == "__main__":
     unittest.main()
